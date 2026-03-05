@@ -8,6 +8,7 @@ var active_drug_set_index = 0;
 var alt_drug_set_index = 1;
 var vc;
 var d = null; //to store date object
+var simStartTime = null; // wall-clock anchor: Date object set at simulation start (custom or real-time)
 var mass;
 var ABW; //for eleveld
 var lbm, height, gender;
@@ -1116,7 +1117,12 @@ function initcpt() {
 }
 function initshare() {
 	if (parseloading == 0) {
-		d = new Date(); //create date object and store in d
+		// Use custom start time if set, otherwise capture real wall clock
+		if (simStartTime) {
+			d = simStartTime;
+		} else {
+			d = new Date(); //create date object and store in d
+		}
 		document.getElementById("sharebutton").style.display = "block";
 		document.getElementById("annotatebutton").style.display = "block";
 		document.getElementById("expandbutton").style.display = "block";
@@ -1141,6 +1147,8 @@ function common_start_calls() {
 			}
 			loop3 = setInterval(updatechart, 5000, myChart);
 		loop7 = setInterval(displayWarningBanner, 60*2000);
+		// Commit the chosen simulation start time before initshare captures d
+		if (typeof commitSimStartTime === 'function') commitSimStartTime();
 		initshare();
 		trk();
 }
@@ -1611,8 +1619,17 @@ function update() {
 	time_in_s = time/1000;
 	
 	document.getElementById("clock").innerHTML = converttime(Math.floor(time_in_s));
+	// wall-clock secondary display
+	var wc = document.getElementById("wallclock");
+	if (wc) {
+		if (simStartTime) {
+			wc.style.display = "inline";
+			wc.innerHTML = convertWallClock(Math.floor(time_in_s));
+		} else {
+			wc.style.display = "none";
+		}
+	}
 
-	//branch off intermittent bolus code here
 
 	if ((drug_sets[active_drug_set_index].IB_active == 1) && (drug_sets[active_drug_set_index].running == 1)) {
 			document.getElementById("displayvolume").innerHTML = Math.round(drug_sets[active_drug_set_index].volinf[Math.floor(time_in_s)]*10)/10;
@@ -1952,6 +1969,17 @@ function converttime(relativeclock) {
 	} else if (relativeclock>=3600) {
 		return h + "h " + m + "m " + s + "s";
 	}
+}
+
+// Returns wall-clock time string for a given elapsed seconds offset from simStartTime
+function convertWallClock(elapsedSeconds) {
+	if (!simStartTime) return "";
+	var wallMs = simStartTime.getTime() + elapsedSeconds * 1000;
+	var wallDate = new Date(wallMs);
+	var h = wallDate.getHours();
+	var m = wallDate.getMinutes().toString().padStart(2,'0');
+	var s = wallDate.getSeconds().toString().padStart(2,'0');
+	return h + ":" + m + ":" + s;
 }
 
 function swapCetCodeForFentanyl() {
