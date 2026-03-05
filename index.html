@@ -287,25 +287,6 @@
 				      <div>This mode activates the infusulator, a retrospective time-series data entry tool, and an export module.</div>
 					</div>
 
-					<!-- SIMULATION START TIME BLOCK -->
-					<div id="simStartTimeBlock" style="margin-top:10px; padding:8px 10px; border:1px solid #ccc; border-radius:8px; background:rgba(0,0,0,0.03)">
-						<div style="font-size:0.85rem; font-weight:bold; margin-bottom:6px; color:#333;">Simulation start time</div>
-						<div style="display:flex; gap:6px; align-items:center; margin-bottom:4px">
-							<a class="button active" id="simStartNowBtn" onclick="simStartSetMode('now')" style="padding:3px 12px; font-size:0.8rem;">Now</a>
-							<a class="button" id="simStartCustomBtn" onclick="simStartSetMode('custom')" style="padding:3px 12px; font-size:0.8rem;">Custom</a>
-						</div>
-						<div id="simStartCustomInputs" style="display:none; margin-top:6px">
-							<div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap">
-								<input type="date" id="simStartDate" style="font-size:0.85rem; padding:3px 6px; border:1px solid #bbb; border-radius:4px;"/>
-								<input type="time" id="simStartTimeInput" step="1" style="font-size:0.85rem; padding:3px 6px; border:1px solid #bbb; border-radius:4px;"/>
-							</div>
-							<div id="simStartWarning" style="display:none; font-size:0.75rem; color:#c07000; margin-top:4px">
-								⚠ Start time is in the past — retrospective mode
-							</div>
-						</div>
-					</div>
-					<!-- END SIMULATION START TIME BLOCK -->
-
 			</div>
 		</div>
 	</div>
@@ -595,7 +576,7 @@
 		<div id="parallax1">
 			<div id="parallax1container" class="">
 				<div class="displayleft">
-					<div class="clockcontainer"><span id="clock">_</span><span id="wallclock" style="display:none; font-size:0.7em; opacity:0.65; margin-left:6px; font-weight:normal; letter-spacing:0"></span></div>
+					<div class="clockcontainer"><span id="clock">_</span><span id="wallclock" onclick="toggleWallClockPanel()" style="display:none; font-size:0.7em; opacity:0.65; margin-left:6px; font-weight:normal; letter-spacing:0; cursor:pointer; border-bottom:1px dashed rgba(255,255,255,0.3)" title="Tap to adjust wall-clock sync"></span></div>
 					<div class="VIcontainer">VI: <span id="displayvolume">_</span>ml</div>
 				</div><!--
 				--><div class="displayright">
@@ -609,6 +590,22 @@
 					</div>
 				</div>
 			</div>
+			<!-- WALL-CLOCK SYNC PANEL -->
+			<div id="wallClockPanel" style="display:none; padding:8px 12px; background:rgba(0,0,0,0.55); border-top:1px solid rgba(255,255,255,0.15); font-size:0.82rem; color:#eee">
+				<div style="margin-bottom:5px; font-weight:bold; font-size:0.75rem; letter-spacing:0.05em; opacity:0.7; text-transform:uppercase">Sync wall clock</div>
+				<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+					<div style="display:flex; gap:4px; align-items:center">
+						<label style="opacity:0.75; font-size:0.75rem">Case start:</label>
+						<input type="date" id="wcSyncDate" style="font-size:0.78rem; padding:2px 5px; border:1px solid rgba(255,255,255,0.3); border-radius:4px; background:rgba(255,255,255,0.12); color:#eee; width:130px"/>
+						<input type="time" id="wcSyncTime" step="1" style="font-size:0.78rem; padding:2px 5px; border:1px solid rgba(255,255,255,0.3); border-radius:4px; background:rgba(255,255,255,0.12); color:#eee; width:90px"/>
+					</div>
+					<a class="button tinybutton" onclick="applyWallClockSync()" style="color:#fff; border-color:rgba(255,255,255,0.5)">Apply</a>
+					<a class="button tinybutton" onclick="syncToNow()" style="color:#fff; border-color:rgba(255,255,255,0.5)" title="Back-calculate start time so the current elapsed time matches right now">Sync to now</a>
+					<a class="button tinybutton" onclick="clearWallClockSync()" style="color:#aaa; border-color:rgba(255,255,255,0.25)">Clear</a>
+				</div>
+				<div id="wcSyncHint" style="margin-top:5px; font-size:0.72rem; opacity:0.55">Enter the clock time when the infusion actually started, or tap <b>Sync to now</b> to back-calculate it from current elapsed time.</div>
+			</div>
+			<!-- END WALL-CLOCK SYNC PANEL -->
 		</div>
 
 
@@ -952,82 +949,60 @@ document.getElementById("installclose").addEventListener('click', function() {
 function hideInstallPromotion() {
 	document.getElementById("installbutton").classList.remove("show");
 }
+	</script>
 	<!-- chart.js from https://cdnjs.com/libraries/Chart.js-->
 	<script src="chart.min.js" defer></script>
 	<script src="chartjs-plugin-crosshair.min.js" defer></script>
 	<script>
-	// ── Simulation Start Time UI ──────────────────────────────────
-	(function() {
-		var _mode = 'now';
-
-		window.simStartSetMode = function(mode) {
-			_mode = mode;
-			var nowBtn = document.getElementById('simStartNowBtn');
-			var customBtn = document.getElementById('simStartCustomBtn');
-			var customInputs = document.getElementById('simStartCustomInputs');
-			if (mode === 'now') {
-				nowBtn.classList.add('active');
-				customBtn.classList.remove('active');
-				customInputs.style.display = 'none';
-				simStartTime = null; // will be set at initshare() to real Date.now()
-			} else {
-				customBtn.classList.add('active');
-				nowBtn.classList.remove('active');
-				customInputs.style.display = 'block';
-				// Pre-fill with current date/time if blank
-				var dateEl = document.getElementById('simStartDate');
-				var timeEl = document.getElementById('simStartTimeInput');
-				if (!dateEl.value) {
-					var now = new Date();
-					dateEl.value = now.toISOString().substring(0,10);
-					var hh = now.getHours().toString().padStart(2,'0');
-					var mm = now.getMinutes().toString().padStart(2,'0');
-					var ss = now.getSeconds().toString().padStart(2,'0');
-					timeEl.value = hh + ':' + mm + ':' + ss;
-				}
-				_updateWarning();
-			}
-		};
-
-		function _updateWarning() {
-			var dateEl = document.getElementById('simStartDate');
-			var timeEl = document.getElementById('simStartTimeInput');
-			var warn = document.getElementById('simStartWarning');
-			if (dateEl.value && timeEl.value) {
-				var chosen = new Date(dateEl.value + 'T' + timeEl.value);
-				if (chosen < new Date()) {
-					warn.style.display = 'block';
-				} else {
-					warn.style.display = 'none';
-				}
-			}
+	// ── Wall-Clock Sync UI ────────────────────────────────────────
+	window.toggleWallClockPanel = function() {
+		var panel = document.getElementById('wallClockPanel');
+		if (!panel) return;
+		if (panel.style.display === 'none') {
+			// Pre-fill inputs with current back-calculated start time
+			var elapsed = (typeof time_in_s !== 'undefined' ? time_in_s : 0);
+			var start = simStartTime || new Date(Date.now() - elapsed * 1000);
+			document.getElementById('wcSyncDate').value = start.toISOString().substring(0,10);
+			var h = start.getHours().toString().padStart(2,'0');
+			var m = start.getMinutes().toString().padStart(2,'0');
+			var s = start.getSeconds().toString().padStart(2,'0');
+			document.getElementById('wcSyncTime').value = h + ':' + m + ':' + s;
+			panel.style.display = 'block';
+		} else {
+			panel.style.display = 'none';
 		}
+	};
 
-		// Hook into the Proceed button — read custom time just before simulation starts
-		// We patch initshare via a MutationObserver watching bodywrapper opacity (sim start signal)
-		// Simpler: override common_start_calls via a patch applied after scripts load
-		document.addEventListener('DOMContentLoaded', function() {
-			var dateEl = document.getElementById('simStartDate');
-			var timeEl = document.getElementById('simStartTimeInput');
-			if (dateEl) dateEl.addEventListener('change', _updateWarning);
-			if (timeEl) timeEl.addEventListener('change', _updateWarning);
-		});
+	window.applyWallClockSync = function() {
+		var dateVal = document.getElementById('wcSyncDate').value;
+		var timeVal = document.getElementById('wcSyncTime').value;
+		if (dateVal && timeVal) {
+			simStartTime = new Date(dateVal + 'T' + timeVal);
+			if (typeof d !== 'undefined') d = simStartTime;
+			document.getElementById('wallClockPanel').style.display = 'none';
+			var wc = document.getElementById('wallclock');
+			if (wc) { wc.style.display = 'inline'; }
+		}
+	};
 
-		// Expose a function features.js / main.js can call to commit the chosen time
-		window.commitSimStartTime = function() {
-			if (_mode === 'custom') {
-				var dateEl = document.getElementById('simStartDate');
-				var timeEl = document.getElementById('simStartTimeInput');
-				if (dateEl.value && timeEl.value) {
-					simStartTime = new Date(dateEl.value + 'T' + timeEl.value);
-				} else {
-					simStartTime = null;
-				}
-			} else {
-				simStartTime = null; // initshare will capture Date.now()
-			}
-		};
-	})();
+	window.syncToNow = function() {
+		var elapsed = (typeof time_in_s !== 'undefined' ? time_in_s * 1000 : 0);
+		simStartTime = new Date(Date.now() - elapsed);
+		if (typeof d !== 'undefined') d = simStartTime;
+		document.getElementById('wallClockPanel').style.display = 'none';
+		var wc = document.getElementById('wallclock');
+		if (wc) { wc.style.display = 'inline'; }
+	};
+
+	window.clearWallClockSync = function() {
+		simStartTime = null;
+		document.getElementById('wallClockPanel').style.display = 'none';
+		var wc = document.getElementById('wallclock');
+		if (wc) { wc.style.display = 'none'; }
+	};
+
+	// no-op: simStartTime is set live during simulation, not at start
+	window.commitSimStartTime = function() {};
 	</script>
 </body>
 </html>
