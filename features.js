@@ -5427,6 +5427,9 @@ function timeFxSubmitJump() {
 function timeFxOpenJump() {
 	document.getElementById("timeFxMessage").innerHTML = "";
 	setnow2(Math.floor(time_in_s));
+	// Hide wall-clock section unless opened via wcOpenSync()
+	var wcs = document.getElementById("wcSyncSection");
+	if (wcs) wcs.style.display = "none";
 	hideallmodal();
 	setmodal('modalJump');
 }

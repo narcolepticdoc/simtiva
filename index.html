@@ -576,7 +576,7 @@
 		<div id="parallax1">
 			<div id="parallax1container" class="">
 				<div class="displayleft">
-					<div class="clockcontainer"><span id="clock">_</span><span id="wallclock" onclick="toggleWallClockPanel()" style="display:none; font-size:0.7em; opacity:0.65; margin-left:6px; font-weight:normal; letter-spacing:0; cursor:pointer; border-bottom:1px dashed rgba(255,255,255,0.3)" title="Tap to adjust wall-clock sync"></span></div>
+					<div class="clockcontainer"><span id="clock">_</span><span id="wallclock" style="display:none; font-size:0.7em; opacity:0.65; margin-left:6px; font-weight:normal; letter-spacing:0"></span></div>
 					<div class="VIcontainer">VI: <span id="displayvolume">_</span>ml</div>
 				</div><!--
 				--><div class="displayright">
@@ -590,22 +590,6 @@
 					</div>
 				</div>
 			</div>
-			<!-- WALL-CLOCK SYNC PANEL -->
-			<div id="wallClockPanel" style="display:none; padding:8px 12px; background:rgba(0,0,0,0.55); border-top:1px solid rgba(255,255,255,0.15); font-size:0.82rem; color:#eee">
-				<div style="margin-bottom:5px; font-weight:bold; font-size:0.75rem; letter-spacing:0.05em; opacity:0.7; text-transform:uppercase">Sync wall clock</div>
-				<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-					<div style="display:flex; gap:4px; align-items:center">
-						<label style="opacity:0.75; font-size:0.75rem">Case start:</label>
-						<input type="date" id="wcSyncDate" style="font-size:0.78rem; padding:2px 5px; border:1px solid rgba(255,255,255,0.3); border-radius:4px; background:rgba(255,255,255,0.12); color:#eee; width:130px"/>
-						<input type="time" id="wcSyncTime" step="1" style="font-size:0.78rem; padding:2px 5px; border:1px solid rgba(255,255,255,0.3); border-radius:4px; background:rgba(255,255,255,0.12); color:#eee; width:90px"/>
-					</div>
-					<a class="button tinybutton" onclick="applyWallClockSync()" style="color:#fff; border-color:rgba(255,255,255,0.5)">Apply</a>
-					<a class="button tinybutton" onclick="syncToNow()" style="color:#fff; border-color:rgba(255,255,255,0.5)" title="Back-calculate start time so the current elapsed time matches right now">Sync to now</a>
-					<a class="button tinybutton" onclick="clearWallClockSync()" style="color:#aaa; border-color:rgba(255,255,255,0.25)">Clear</a>
-				</div>
-				<div id="wcSyncHint" style="margin-top:5px; font-size:0.72rem; opacity:0.55">Enter the clock time when the infusion actually started, or tap <b>Sync to now</b> to back-calculate it from current elapsed time.</div>
-			</div>
-			<!-- END WALL-CLOCK SYNC PANEL -->
 		</div>
 
 
@@ -954,54 +938,8 @@ function hideInstallPromotion() {
 	<script src="chart.min.js" defer></script>
 	<script src="chartjs-plugin-crosshair.min.js" defer></script>
 	<script>
-	// ── Wall-Clock Sync UI ────────────────────────────────────────
-	window.toggleWallClockPanel = function() {
-		var panel = document.getElementById('wallClockPanel');
-		if (!panel) return;
-		if (panel.style.display === 'none') {
-			// Pre-fill inputs with current back-calculated start time
-			var elapsed = (typeof time_in_s !== 'undefined' ? time_in_s : 0);
-			var start = simStartTime || new Date(Date.now() - elapsed * 1000);
-			document.getElementById('wcSyncDate').value = start.toISOString().substring(0,10);
-			var h = start.getHours().toString().padStart(2,'0');
-			var m = start.getMinutes().toString().padStart(2,'0');
-			var s = start.getSeconds().toString().padStart(2,'0');
-			document.getElementById('wcSyncTime').value = h + ':' + m + ':' + s;
-			panel.style.display = 'block';
-		} else {
-			panel.style.display = 'none';
-		}
-	};
-
-	window.applyWallClockSync = function() {
-		var dateVal = document.getElementById('wcSyncDate').value;
-		var timeVal = document.getElementById('wcSyncTime').value;
-		if (dateVal && timeVal) {
-			simStartTime = new Date(dateVal + 'T' + timeVal);
-			if (typeof d !== 'undefined') d = simStartTime;
-			document.getElementById('wallClockPanel').style.display = 'none';
-			var wc = document.getElementById('wallclock');
-			if (wc) { wc.style.display = 'inline'; }
-		}
-	};
-
-	window.syncToNow = function() {
-		var elapsed = (typeof time_in_s !== 'undefined' ? time_in_s * 1000 : 0);
-		simStartTime = new Date(Date.now() - elapsed);
-		if (typeof d !== 'undefined') d = simStartTime;
-		document.getElementById('wallClockPanel').style.display = 'none';
-		var wc = document.getElementById('wallclock');
-		if (wc) { wc.style.display = 'inline'; }
-	};
-
-	window.clearWallClockSync = function() {
-		simStartTime = null;
-		document.getElementById('wallClockPanel').style.display = 'none';
-		var wc = document.getElementById('wallclock');
-		if (wc) { wc.style.display = 'none'; }
-	};
-
-	// no-op: simStartTime is set live during simulation, not at start
+	// Wall-clock sync functions are defined in main.js (wcApply, wcSyncToNow, wcClear, wcOpenSync)
+	// commitSimStartTime is called by common_start_calls — no-op since sync happens live
 	window.commitSimStartTime = function() {};
 	</script>
 </body>

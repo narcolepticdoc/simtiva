@@ -906,6 +906,13 @@ const xInputCardsHTML = `
 						<div class="timeFxLine2">Jump backward/forward in time</div>
 					</div>
 				</div>
+				<div class="timeFxRow" onclick="wcOpenSync();">
+					<div class="timeFxRowLeft"><a class="timeFxButton" onclick="wcOpenSync();"><i class="fas fa-clock fa-fw"></i></a></div>
+					<div class="timeFxRowRight">
+						<div class="timeFxLine1">Sync wall clock</div>
+						<div class="timeFxLine2">Align simulation to a real case start time</div>
+					</div>
+				</div>
 			</div>
 		</div>
 		<div class="card" id="parameters">
@@ -1945,6 +1952,31 @@ const xModalsHTML =
 						<a class="button muted right" onclick="modal=document.getElementById('modalJump');hideallmodal()">CANCEL</a>
 
 					</div>
+
+					<!-- WALL-CLOCK SYNC SECTION -->
+					<div id="wcSyncSection" style="display:none; margin-top:18px; padding-top:14px; border-top:1px solid #ddd;">
+						<div style="font-weight:bold; font-style:italic; margin-bottom:8px">Sync wall clock to case</div>
+						<div style="font-size:0.82rem; color:#555; margin-bottom:10px">
+							Enter the real clock time when the infusion actually started, or tap <b>Sync to now</b> to back-calculate it from current elapsed time.
+						</div>
+						<table class="table-Init" style="width:100%">
+							<tr class="fr">
+								<td>Case start date</td>
+								<td><input type="date" id="wcSyncDate" style="width:100%; font-size:0.9rem; padding:3px 6px; border:1px solid #bbb; border-radius:4px;"/></td>
+							</tr>
+							<tr class="fr">
+								<td>Case start time</td>
+								<td><input type="time" id="wcSyncTime" step="1" style="width:100%; font-size:0.9rem; padding:3px 6px; border:1px solid #bbb; border-radius:4px;"/></td>
+							</tr>
+						</table>
+						<div id="wcSyncStatus" style="font-size:0.78rem; color:#888; margin:8px 0; min-height:1.2em"></div>
+						<div style="display:flex; gap:8px; flex-wrap:wrap; padding-top:4px">
+							<a class="button invert" onclick="wcApply()">Apply</a>
+							<a class="button muted" onclick="wcSyncToNow()">Sync to now</a>
+							<a class="button muted right" onclick="wcClear()">Clear</a>
+						</div>
+					</div>
+					<!-- END WALL-CLOCK SYNC SECTION -->
 				</div>
 			</div>
 		</div><!--end modalJump-->

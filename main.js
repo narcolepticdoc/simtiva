@@ -1982,6 +1982,76 @@ function convertWallClock(elapsedSeconds) {
 	return h + ":" + m + ":" + s;
 }
 
+// ── Wall-clock sync functions ──────────────────────────────────
+function wcPreFill() {
+	// Pre-fill date/time inputs with current back-calculated start time
+	var elapsed = Math.floor(time_in_s) || 0;
+	var start = simStartTime ? simStartTime : new Date(Date.now() - elapsed * 1000);
+	var dateEl = document.getElementById('wcSyncDate');
+	var timeEl = document.getElementById('wcSyncTime');
+	if (dateEl && timeEl) {
+		dateEl.value = start.toISOString().substring(0, 10);
+		var h = start.getHours().toString().padStart(2,'0');
+		var m = start.getMinutes().toString().padStart(2,'0');
+		var s = start.getSeconds().toString().padStart(2,'0');
+		timeEl.value = h + ':' + m + ':' + s;
+	}
+	wcUpdateStatus();
+}
+
+function wcUpdateStatus() {
+	var statusEl = document.getElementById('wcSyncStatus');
+	if (!statusEl) return;
+	if (simStartTime) {
+		statusEl.innerHTML = '✓ Wall clock active — case started at <b>' +
+			simStartTime.toLocaleTimeString() + ' on ' + simStartTime.toLocaleDateString() + '</b>';
+		statusEl.style.color = '#2a7a2a';
+	} else {
+		statusEl.innerHTML = 'No wall clock set.';
+		statusEl.style.color = '#888';
+	}
+}
+
+function wcApply() {
+	var dateVal = document.getElementById('wcSyncDate').value;
+	var timeVal = document.getElementById('wcSyncTime').value;
+	if (dateVal && timeVal) {
+		simStartTime = new Date(dateVal + 'T' + timeVal);
+		if (d) d = simStartTime; // keep export date consistent
+		var wc = document.getElementById('wallclock');
+		if (wc) wc.style.display = 'inline';
+		wcUpdateStatus();
+	}
+}
+
+function wcSyncToNow() {
+	// Back-calculate: start time = now - elapsed
+	simStartTime = new Date(Date.now() - Math.floor(time_in_s) * 1000);
+	if (d) d = simStartTime;
+	var wc = document.getElementById('wallclock');
+	if (wc) wc.style.display = 'inline';
+	wcPreFill(); // update inputs to reflect the new value
+}
+
+function wcClear() {
+	simStartTime = null;
+	var wc = document.getElementById('wallclock');
+	if (wc) wc.style.display = 'none';
+	wcUpdateStatus();
+}
+
+function wcOpenSync() {
+	// Open the Jump modal and show the sync section
+	if (typeof timeFxOpenJump === 'function') timeFxOpenJump();
+	setTimeout(function() {
+		var section = document.getElementById('wcSyncSection');
+		if (section) {
+			section.style.display = 'block';
+			wcPreFill();
+		}
+	}, 120);
+}
+
 function swapCetCodeForFentanyl() {
 
 }
