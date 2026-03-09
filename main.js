@@ -2031,20 +2031,20 @@ function wcApply() {
 	// How many seconds should have elapsed since case start?
 	var targetElapsed = Math.floor((now.getTime() - caseStart.getTime()) / 1000);
 
+	// Set the wall-clock anchor regardless
+	simStartTime = caseStart;
+	if (d) d = simStartTime;
+	var wc = document.getElementById('wallclock');
+	if (wc) wc.style.display = 'inline';
+
 	if (targetElapsed < 2) {
-		// Case start is in the future or right now — just set the anchor, no jump needed
-		simStartTime = caseStart;
-		if (d) d = simStartTime;
-		var wc = document.getElementById('wallclock');
-		if (wc) wc.style.display = 'inline';
+		// Case start is in the future or just now — no jump needed
 		wcUpdateStatus();
+		hidemodal('modalJump');
 		return;
 	}
 
-	// Jump the sim: delta = targetElapsed - currentElapsed
-	var jumpDelta = targetElapsed - Math.floor(time_in_s);
 	var maxDuration = drug_sets[0].cpt_rates_real.length - 300;
-
 	if (targetElapsed >= maxDuration) {
 		var statusEl = document.getElementById('wcSyncStatus');
 		if (statusEl) {
@@ -2054,13 +2054,20 @@ function wcApply() {
 		return;
 	}
 
-	// Set the wall-clock anchor before jumping
-	simStartTime = caseStart;
-	if (d) d = simStartTime;
-	var wc = document.getElementById('wallclock');
-	if (wc) wc.style.display = 'inline';
+	// jumpDelta = how far to move from current elapsed to target elapsed
+	var jumpDelta = targetElapsed - Math.floor(time_in_s);
 
-	// Use existing jump machinery
+	// Ensure sim is suspended before jumping (timeFxResume handles resume internally)
+	if (time_of_stop === -1) {
+		// Sim is running — suspend it first without triggering UI changes
+		clearInterval(loop1);
+		clearInterval(loop2);
+		clearInterval(loop3);
+		clearInterval(loop7);
+		time_of_stop = Date.now();
+	}
+
+	// Now jump: timeFxResume takes delta seconds, handles state arrays & restarts loops
 	timeFxResume(jumpDelta);
 	hidemodal('modalJump');
 	wcUpdateStatus();
