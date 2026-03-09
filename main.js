@@ -1147,6 +1147,8 @@ function common_start_calls() {
 			}
 			loop3 = setInterval(updatechart, 5000, myChart);
 		loop7 = setInterval(displayWarningBanner, 60*2000);
+		// Trigger chart/layout reflow to fix header position on mobile on first load
+		setTimeout(function() { if (typeof updatechartview2 === 'function') updatechartview2(); }, 600);
 		// Commit the chosen simulation start time before initshare captures d
 		if (typeof commitSimStartTime === 'function') commitSimStartTime();
 		initshare();
@@ -1997,6 +1999,12 @@ function wcPreFill() {
 		timeEl.value = h + ':' + m + ':' + s;
 	}
 	wcUpdateStatus();
+	// Show a hint about what Apply will do
+	var statusEl = document.getElementById('wcSyncStatus');
+	if (statusEl && !simStartTime) {
+		statusEl.innerHTML = 'Enter the real clock time the infusion started. <b>Apply</b> will jump the sim to match.';
+		statusEl.style.color = '#555';
+	}
 }
 
 function wcUpdateStatus() {
@@ -2015,13 +2023,47 @@ function wcUpdateStatus() {
 function wcApply() {
 	var dateVal = document.getElementById('wcSyncDate').value;
 	var timeVal = document.getElementById('wcSyncTime').value;
-	if (dateVal && timeVal) {
-		simStartTime = new Date(dateVal + 'T' + timeVal);
-		if (d) d = simStartTime; // keep export date consistent
+	if (!dateVal || !timeVal) return;
+
+	var caseStart = new Date(dateVal + 'T' + timeVal);
+	var now = new Date();
+
+	// How many seconds should have elapsed since case start?
+	var targetElapsed = Math.floor((now.getTime() - caseStart.getTime()) / 1000);
+
+	if (targetElapsed < 2) {
+		// Case start is in the future or right now — just set the anchor, no jump needed
+		simStartTime = caseStart;
+		if (d) d = simStartTime;
 		var wc = document.getElementById('wallclock');
 		if (wc) wc.style.display = 'inline';
 		wcUpdateStatus();
+		return;
 	}
+
+	// Jump the sim: delta = targetElapsed - currentElapsed
+	var jumpDelta = targetElapsed - Math.floor(time_in_s);
+	var maxDuration = drug_sets[0].cpt_rates_real.length - 300;
+
+	if (targetElapsed >= maxDuration) {
+		var statusEl = document.getElementById('wcSyncStatus');
+		if (statusEl) {
+			statusEl.innerHTML = '⚠ Target time exceeds simulation session length. Extend session first.';
+			statusEl.style.color = '#c00';
+		}
+		return;
+	}
+
+	// Set the wall-clock anchor before jumping
+	simStartTime = caseStart;
+	if (d) d = simStartTime;
+	var wc = document.getElementById('wallclock');
+	if (wc) wc.style.display = 'inline';
+
+	// Use existing jump machinery
+	timeFxResume(jumpDelta);
+	hidemodal('modalJump');
+	wcUpdateStatus();
 }
 
 function wcSyncToNow() {
