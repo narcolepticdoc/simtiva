@@ -2028,48 +2028,33 @@ function wcApply() {
 	var caseStart = new Date(dateVal + 'T' + timeVal);
 	var now = new Date();
 
-	// How many seconds should have elapsed since case start?
-	var targetElapsed = Math.floor((now.getTime() - caseStart.getTime()) / 1000);
-
-	// Set the wall-clock anchor regardless
+	// Set wall-clock anchor regardless
 	simStartTime = caseStart;
 	if (d) d = simStartTime;
 	var wc = document.getElementById('wallclock');
 	if (wc) wc.style.display = 'inline';
 
+	// How many seconds should have elapsed since case start?
+	var targetElapsed = Math.floor((now.getTime() - caseStart.getTime()) / 1000);
+
 	if (targetElapsed < 2) {
-		// Case start is in the future or just now — no jump needed
 		wcUpdateStatus();
 		hidemodal('modalJump');
 		return;
 	}
 
-	var maxDuration = drug_sets[0].cpt_rates_real.length - 300;
-	if (targetElapsed >= maxDuration) {
-		var statusEl = document.getElementById('wcSyncStatus');
-		if (statusEl) {
-			statusEl.innerHTML = '⚠ Target time exceeds simulation session length. Extend session first.';
-			statusEl.style.color = '#c00';
-		}
-		return;
-	}
+	// Delegate to timeFxSubmitJump which correctly handles cpt_rates_real,
+	// lookahead pre-computation, and state array truncation.
+	var h = Math.floor(targetElapsed / 3600);
+	var m = Math.floor((targetElapsed % 3600) / 60);
+	var s = targetElapsed % 60;
 
-	// jumpDelta = how far to move from current elapsed to target elapsed
-	var jumpDelta = targetElapsed - Math.floor(time_in_s);
+	document.getElementById('timeFxTimeMode').value = '2';
+	document.getElementById('hh2').value = h;
+	document.getElementById('mm2').value = m;
+	document.getElementById('ss2').value = s;
 
-	// Ensure sim is suspended before jumping (timeFxResume handles resume internally)
-	if (time_of_stop === -1) {
-		// Sim is running — suspend it first without triggering UI changes
-		clearInterval(loop1);
-		clearInterval(loop2);
-		clearInterval(loop3);
-		clearInterval(loop7);
-		time_of_stop = Date.now();
-	}
-
-	// Now jump: timeFxResume takes delta seconds, handles state arrays & restarts loops
-	timeFxResume(jumpDelta);
-	hidemodal('modalJump');
+	timeFxSubmitJump();
 	wcUpdateStatus();
 }
 
