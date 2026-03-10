@@ -1,4 +1,5 @@
-const cacheName = "simtiva-v5-189-starttime3";
+const APP_VERSION = "ND 0.0.1.1";
+const cacheName = "simtiva-" + APP_VERSION.replace(/\s+/g, '-');
 
 const assets = [
 	"/",
@@ -32,73 +33,42 @@ const assets = [
 	"/users.webp"
 ]
 
-self.addEventListener('activate', event => {
-	console.log('now ready to handle fetches!');
-	  event.waitUntil(
-		caches.keys().then(function(cacheNames) {
-			console.log(cacheNames);
-			var promiseArr = cacheNames.map(function(item) {
-				if (item !== cacheName) {
-					// Delete that cached file
-					console.log("deleted " + item);
-					return caches.delete(item);
-				}
-			})
-			return Promise.all(promiseArr);
-		})
-	); // end e.waitUntil
-});
-
-//old activate code
-/*
-self.addEventListener('activate', function(event) {
-  console.log("activation. ready to handle fetches.");
-  event.waitUntil(
-    caches.keys().then(function(cacheNames) {
-      return Promise.all(
-        cacheNames.filter(function(cacheName) {
-          // Return true if you want to remove this cache,
-          // but remember that caches are shared across
-          // the whole origin
-        }).map(function(cacheName) {
-          return caches.delete(cacheName);
-        })
-      );
-    })
-  );
-});
-*/
-//end old activate code
-
-self.addEventListener("install", installEvent => {
+// Install: cache all assets and skip waiting immediately
+self.addEventListener("install", event => {
 	self.skipWaiting();
-	console.log("installing...");
-	installEvent.waitUntil(
-		caches.open(cacheName).then(cache => {
-			cache.addAll(assets)
-		}))
-})
-
-
-
-//ref: https://web.dev/offline-cookbook/#network-falling-back-to-cache
-//off for now, testing
-/*
-self.addEventListener('fetch', function(event) {
-  event.respondWith(
-    fetch(event.request).catch(function() {
-      return caches.match(event.request);
-    })
-  );
+	console.log("[SW] Installing version: " + APP_VERSION);
+	event.waitUntil(
+		caches.open(cacheName).then(cache => cache.addAll(assets))
+	);
 });
-*/
 
+// Activate: clear old caches, claim all clients immediately
+self.addEventListener("activate", event => {
+	console.log("[SW] Activating version: " + APP_VERSION);
+	event.waitUntil(
+		caches.keys().then(cacheNames =>
+			Promise.all(
+				cacheNames.map(name => {
+					if (name !== cacheName) {
+						console.log("[SW] Deleting old cache: " + name);
+						return caches.delete(name);
+					}
+				})
+			)
+		).then(() => self.clients.claim())
+	);
+});
 
-//alternative fetch: cache fallback to network from web.dev (cache first)
-self.addEventListener('fetch', function (event) {
-  event.respondWith(
-    caches.match(event.request).then(function (response) {
-      return response || fetch(event.request);
-    }),
-  );
+// Fetch: cache-first, fall back to network
+self.addEventListener("fetch", event => {
+	event.respondWith(
+		caches.match(event.request).then(response => response || fetch(event.request))
+	);
+});
+
+// Message: respond to version queries from the page
+self.addEventListener("message", event => {
+	if (event.data && event.data.type === "GET_VERSION") {
+		event.ports[0].postMessage({ version: APP_VERSION });
+	}
 });

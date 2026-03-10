@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+	<script>const APP_VERSION = "ND 0.0.1.1";</script>
 	<link rel="stylesheet" href="styles.css">
 	<link rel="preload" href="styles-extra.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
 	<link rel="preload" href="css/fontawesome.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'"> 
@@ -79,7 +80,7 @@
 		</div>
 		<div id="modalInitial" class="modal">
 			<div class="modal-content" id="modalInitialcontent">
-				<div class="modal-header">Enter patient data<!--<span class="close notcondensed" onClick="hideallmodal()">&times;</span>--><img onclick="displayAbout();" src="apple-touch-icon-180x180.png" style="position:absolute;right:6px;width:44px;cursor:pointer"></div>
+				<div class="modal-header">Enter patient data<span id="app-version-display" style="position:absolute;left:50%;transform:translateX(-50%);font-size:0.62rem;font-weight:normal;opacity:0.45;letter-spacing:0.02em;pointer-events:none"></span><!--<span class="close notcondensed" onClick="hideallmodal()">&times;</span>--><img onclick="displayAbout();" src="apple-touch-icon-180x180.png" style="position:absolute;right:6px;width:44px;cursor:pointer"></div>
 				<div class="modal-body">
 					<div class="paedimode_selector">
 						<a class="button_paedimode active" id="paedimode0" onclick="switchpaedimode(0);">Adult</a><!--
@@ -941,6 +942,11 @@ function hideInstallPromotion() {
 	// Wall-clock sync functions are defined in main.js (wcApply, wcSyncToNow, wcClear, wcOpenSync)
 	// commitSimStartTime is called by common_start_calls — no-op since sync happens live
 	window.commitSimStartTime = function() {};
+	// Populate version display in modal header
+	document.addEventListener("DOMContentLoaded", function() {
+		var el = document.getElementById("app-version-display");
+		if (el && typeof APP_VERSION !== "undefined") el.textContent = "v" + APP_VERSION;
+	});
 	</script>
 </body>
 </html>

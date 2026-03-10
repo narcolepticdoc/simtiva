@@ -427,8 +427,27 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", function() {
     navigator.serviceWorker
       .register("/serviceworker.js")
-      .then(res => console.log("service worker registered"))
-      .catch(err => console.log("service worker not registered", err))
+      .then(reg => {
+        console.log("service worker registered");
+        // Auto-update: when a new SW installs and activates, reload the page
+        reg.addEventListener("updatefound", () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener("statechange", () => {
+            if (newWorker.state === "activated" && navigator.serviceWorker.controller) {
+              // New version is live — reload to pick up fresh cache
+              console.log("[SW] New version activated, reloading...");
+              window.location.reload();
+            }
+          });
+        });
+      })
+      .catch(err => console.log("service worker not registered", err));
+
+    // Also handle the case where a new SW took control while the page was open
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      console.log("[SW] Controller changed, reloading...");
+      window.location.reload();
+    });
   });
   window.addEventListener("load", function() {
   	function handleNetworkChange(event) {
