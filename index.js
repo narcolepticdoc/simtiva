@@ -56,7 +56,7 @@ function ringbell2timeoutcallback() {
 function show_graph() {
 	document.getElementById("chartwrapper").classList.remove("hide");
 	document.getElementById("historywrapper2").classList.remove("open");
-	document.getElementById("timelinewrapper").style.display = "none";
+	document.getElementById("timelinewrapper").classList.remove("open");
 	document.getElementById("outputcontainer").classList.remove("showscheme");
 	document.getElementById("btn_displayhistory").classList.remove("active");
 	document.getElementById("btn_displaytimeline").classList.remove("active");
@@ -65,7 +65,7 @@ function show_graph() {
 function show_history() {
 	document.getElementById("chartwrapper").classList.add("hide");
 	document.getElementById("historywrapper2").classList.add("open");
-	document.getElementById("timelinewrapper").style.display = "none";
+	document.getElementById("timelinewrapper").classList.remove("open");
 	document.getElementById("outputcontainer").classList.add("showscheme");
 	document.getElementById("btn_displayhistory").classList.add("active");
 	document.getElementById("btn_displaychart").classList.remove("active");
@@ -74,7 +74,7 @@ function show_history() {
 function show_timeline() {
 	document.getElementById("chartwrapper").classList.add("hide");
 	document.getElementById("historywrapper2").classList.remove("open");
-	document.getElementById("timelinewrapper").style.display = "block";
+	document.getElementById("timelinewrapper").classList.add("open");
 	document.getElementById("outputcontainer").classList.add("showscheme");
 	document.getElementById("btn_displaytimeline").classList.add("active");
 	document.getElementById("btn_displaychart").classList.remove("active");

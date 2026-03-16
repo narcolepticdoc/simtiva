@@ -415,10 +415,22 @@ body.dark #ptolcard_switch {
 
 /* ── Timeline Editor ─────────────────────────────────────── */
 #timelinewrapper {
-    height: calc(100% - 0px);
+    position: absolute;
+    width: 100%;
+    height: calc(100% - 2rem);
     overflow-y: auto;
+    white-space: normal;
+    top: 2rem;
+    padding: 0;
     background: #f7f7f7;
+    transform: translateX(105%);
+    opacity: 0;
+    transition: 0.3s ease-in-out all;
     -webkit-overflow-scrolling: touch;
+}
+#timelinewrapper.open {
+    transform: translateX(0);
+    opacity: 1;
 }
 .tl-row {
     display: flex;
