@@ -429,24 +429,25 @@ if ("serviceWorker" in navigator) {
       .register("/serviceworker.js")
       .then(reg => {
         console.log("service worker registered");
-        // Auto-update: when a new SW installs and activates, reload the page
+        // When a new SW activates, show update notice rather than auto-reloading
         reg.addEventListener("updatefound", () => {
           const newWorker = reg.installing;
           newWorker.addEventListener("statechange", () => {
-            if (newWorker.state === "activated" && navigator.serviceWorker.controller) {
-              // New version is live — reload to pick up fresh cache
-              console.log("[SW] New version activated, reloading...");
-              window.location.reload();
+            if (newWorker.state === "activated") {
+              console.log("[SW] New version activated");
+              var notice = document.getElementById("app-update-notice");
+              if (notice) notice.style.display = "inline";
             }
           });
         });
       })
       .catch(err => console.log("service worker not registered", err));
 
-    // Also handle the case where a new SW took control while the page was open
+    // When a new SW takes control, show update notice rather than auto-reloading
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      console.log("[SW] Controller changed, reloading...");
-      window.location.reload();
+      console.log("[SW] Controller changed — update available");
+      var notice = document.getElementById("app-update-notice");
+      if (notice) notice.style.display = "inline";
     });
   });
   window.addEventListener("load", function() {
@@ -5528,3 +5529,569 @@ if (iOS()) {
 	r = document.querySelector(":root");
 	r.style.setProperty('--extrapad', '8px');
 }
+// ═══════════════════════════════════════════════════════════════
+// TIMELINE EDITOR  (ND build)
+// ═══════════════════════════════════════════════════════════════
+// historyarrays entry format:
+//   [0,1,t,mg]          manual bolus
+//   [0,2,t,ml_h]        manual rate change (ml/h)
+//   [1,0,t,target]      CPT target set
+//   [1,1,t,mg]          CPT bolus
+//   [1,2,t,scheme[]]    CPT rate schedule (historyarray snapshot)
+//   [2,0,t,target]      CET target set
+//   [2,2,t,scheme[]]    CET rate schedule
+// ───────────────────────────────────────────────────────────────
+
+// ── Helpers ─────────────────────────────────────────────────────
+
+function tlConvertTime(s) {
+    // seconds → "H:MM:SS" or "MM:SS"
+    s = Math.floor(s);
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    var sec = s % 60;
+    if (h > 0) return h + ':' + String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+    return String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+}
+
+function tlParseTime(str) {
+    // "H:MM:SS" or "MM:SS" or plain seconds → integer seconds
+    str = str.trim();
+    if (/^\d+$/.test(str)) return parseInt(str);
+    var parts = str.split(':').map(Number);
+    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+    if (parts.length === 2) return parts[0]*60 + parts[1];
+    return NaN;
+}
+
+function tlIsTCI(entry) {
+    return entry[0] === 1 || entry[0] === 2;
+}
+
+function tlIsScheme(entry) {
+    return (entry[0] === 1 || entry[0] === 2) && entry[1] === 2;
+}
+
+function tlIsTarget(entry) {
+    return (entry[0] === 1 || entry[0] === 2) && entry[1] === 0;
+}
+
+function tlEventLabel(e) {
+    if (e[0] === 0 && e[1] === 1) return 'Bolus ' + e[3] + drug_sets[0].infused_units;
+    if (e[0] === 0 && e[1] === 2) return 'Rate ' + Math.round(e[3]*100)/100 + ' ml/h';
+    if (e[0] === 1 && e[1] === 0) return 'TCI Cp ' + e[3] + ' ' + drug_sets[0].conc_units + '/ml';
+    if (e[0] === 1 && e[1] === 1) return 'TCI Bolus ' + e[3] + drug_sets[0].infused_units;
+    if (e[0] === 1 && e[1] === 2) return '↳ TCI scheme';
+    if (e[0] === 2 && e[1] === 0) return 'TCI Ce ' + e[3] + ' ' + drug_sets[0].conc_units + '/ml';
+    if (e[0] === 2 && e[1] === 2) return '↳ TCI scheme';
+    return 'Event';
+}
+
+function tlIsEditable(e) {
+    // scheme arrays are internal — shown read-only, edited via their parent target
+    return !(tlIsScheme(e));
+}
+
+// ── Rebuild historyarray from historyarrays up to (not including) time T ───
+
+function tlBuildHistoryArray(upToTime) {
+    var ha = drug_sets[0].historyarrays;
+    drug_sets[0].historyarray = [];
+    var lastScheme = null;
+    var lastManualRate = null; // ml/h
+
+    for (var i = 0; i < ha.length; i++) {
+        var e = ha[i];
+        if (e[2] !== undefined && e[2] >= upToTime) break;
+
+        if (tlIsScheme(e)) {
+            // TCI scheme - store the whole scheme array, find last rate before upToTime
+            lastScheme = e[3]; // array of [time, rate_amount/sec]
+            lastManualRate = null;
+        } else if (e[0] === 0 && e[1] === 2) {
+            // manual rate change - ml/h stored in [3]
+            lastManualRate = e[3];
+            lastScheme = null;
+        }
+    }
+
+    if (lastScheme) {
+        // Restore TCI scheme, truncated to upToTime
+        for (var j = 0; j < lastScheme.length; j++) {
+            if (lastScheme[j][0] < upToTime) {
+                drug_sets[0].historyarray.push([lastScheme[j][0], lastScheme[j][1]]);
+            }
+        }
+    } else if (lastManualRate !== null) {
+        // Find the time of the last rate change
+        for (var i = ha.length - 1; i >= 0; i--) {
+            if (ha[i][0] === 0 && ha[i][1] === 2 && ha[i][2] < upToTime) {
+                var rateAmt = ha[i][3] * drug_sets[0].infusate_concentration / 3600;
+                drug_sets[0].historyarray.push([ha[i][2], rateAmt]);
+                break;
+            }
+        }
+    }
+    // If nothing found historyarray stays empty (sim at zero rate)
+}
+
+// ── Find last TCI pump rate (ml/h) at or before time T ──────────
+
+function tlLastTCIRate(T) {
+    var ha = drug_sets[0].historyarrays;
+    // Find last scheme entry before T
+    var scheme = null;
+    for (var i = 0; i < ha.length; i++) {
+        if (tlIsScheme(ha[i]) && ha[i][2] <= T) scheme = ha[i][3];
+    }
+    if (!scheme || scheme.length === 0) return 0;
+    // Find last step in scheme at or before T
+    var rate = scheme[0][1];
+    for (var j = 0; j < scheme.length; j++) {
+        if (scheme[j][0] <= T) rate = scheme[j][1];
+        else break;
+    }
+    return Math.round(rate * 3600 / drug_sets[0].infusate_concentration * 100) / 100;
+}
+
+// ── Core re-simulation from time T ──────────────────────────────
+
+function tlRerunFromTime(T) {
+    if (!drug_sets[0] || !drug_sets[0].cpt_cp || drug_sets[0].cpt_cp.length === 0) return;
+    T = Math.max(1, Math.floor(T));
+
+    // 1. Stop loops
+    clearInterval(loop1); clearInterval(loop2);
+    clearInterval(loop3); clearInterval(loop7);
+    var wasRunning = (time_of_stop === -1);
+    time_of_stop = Date.now();
+
+    // 2. Truncate PK arrays back to T
+    drug_sets[0].cpt_cp.length = T;
+    drug_sets[0].cpt_ce.length = T;
+    drug_sets[0].cpt_rates_real.length = T;
+    drug_sets[0].volinf.length = T;
+
+    // 3. Truncate chart data back to T
+    var ds = myChart.data.datasets;
+    for (var d = 2; d <= 3; d++) {
+        var idx = ds[d].data.findIndex(function(pt) { return pt.x > T/60; });
+        if (idx > 0) ds[d].data.length = idx;
+        else if (idx === 0) ds[d].data.length = 0;
+    }
+
+    // 4. Rebuild historyarray from remaining historyarrays
+    tlBuildHistoryArray(T + 21600); // include full future schedule
+
+    // 5. Rerun lookaheadfill from T
+    if (T <= drug_sets[0].cpt_cp.length) {
+        lookaheadfill(0, T, T + 21600);
+    }
+
+    // 6. Update historytext display from historyarrays
+    tlRebuildHistoryText();
+
+    // 7. Restore sim state
+    time_of_stop = -1;
+    offset = Date.now() - (Math.floor(time_in_s) * 1000);
+
+    if (wasRunning) {
+        loop1 = setInterval(update, 500);
+        loop2 = setInterval(runinfusion2, refresh_interval);
+        loop3 = setInterval(updatechart, 5000, myChart);
+        loop7 = setInterval(displayWarningBanner, 60*2000);
+    }
+
+    // 8. Update UI
+    myChart.update();
+    document.getElementById('timeFxRowSuspend').classList.remove('hide');
+    document.getElementById('timeFxRowResume').classList.add('hide');
+    document.getElementById('suspendBanner').style.display = 'none';
+    document.getElementById('iconplay').style.display = 'block';
+
+    tlRender();
+}
+
+function tlRebuildHistoryText() {
+    var ha = drug_sets[0].historyarrays;
+    var txt = '';
+    for (var i = 0; i < ha.length; i++) {
+        var e = ha[i];
+        if (e[1] === undefined) continue;
+        if (e[0] === 0 && e[1] === 1)
+            txt += "<div><div class='timespan'>" + tlConvertTime(e[2]) + "</div>Bolus: " + e[3] + drug_sets[0].infused_units + "</div>";
+        else if (e[0] === 0 && e[1] === 2)
+            txt += "<div><div class='timespan'>" + tlConvertTime(e[2]) + "</div>Rate: " + Math.round(e[3]*100)/100 + " ml/h</div>";
+        else if (tlIsTarget(e))
+            txt += "<div><div class='timespan'>" + tlConvertTime(e[2]) + "</div>" + tlEventLabel(e) + "</div>";
+    }
+    drug_sets[0].historytext = txt;
+    var el = document.getElementById('historywrapper');
+    if (el) el.innerHTML = txt;
+}
+
+// ── Edit an existing event ───────────────────────────────────────
+
+function tlCommitEdit(origIndex, newTimeStr, newValStr) {
+    var ha = drug_sets[0].historyarrays;
+    var e = ha[origIndex];
+    if (!e) return;
+
+    var newTime = tlParseTime(newTimeStr);
+    var newVal = parseFloat(newValStr);
+    if (isNaN(newTime) || newTime < 1) { alert('Invalid time'); return; }
+    if (isNaN(newVal) || newVal < 0) { alert('Invalid value'); return; }
+
+    var oldTime = e[2];
+    var rerunT = Math.min(oldTime, newTime);
+    var isTCI = tlIsTarget(e);
+    var mode = e[0];
+
+    // Remove old entry (and its associated scheme if TCI)
+    ha.splice(origIndex, 1);
+    // Remove scheme entry that immediately followed (same time, type=2)
+    for (var i = origIndex; i < ha.length; i++) {
+        if (ha[i][2] === oldTime && tlIsScheme(ha[i])) { ha.splice(i, 1); break; }
+        if (ha[i][2] > oldTime) break;
+    }
+
+    if (isTCI) {
+        // TCI edit: wipe everything after rerunT, then re-deliver
+        tlWipeAfter(rerunT);
+        // Insert placeholder target entry — deliver_cpt/cet will fire on submit
+        // We defer to tlApplyTCITarget which handles the full deliver flow
+        tlApplyTCITarget(mode, newTime, newVal, rerunT);
+        return;
+    }
+
+    // Manual event: update value and time, re-sort, rerun
+    var newEntry = [e[0], e[1], newTime, newVal];
+    // Insert sorted by time
+    var insertAt = ha.findIndex(function(x) { return x[2] > newTime; });
+    if (insertAt === -1) ha.push(newEntry);
+    else ha.splice(insertAt, 0, newEntry);
+
+    tlBuildHistoryArray(newTime + 21600);
+    tlRerunFromTime(rerunT);
+}
+
+// ── Delete an event ──────────────────────────────────────────────
+
+function tlDeleteEvent(index) {
+    var ha = drug_sets[0].historyarrays;
+    var e = ha[index];
+    if (!e) return;
+    var T = e[2];
+    var isTCI = tlIsTarget(e);
+    var wasTCIActive = tlIsTCIActiveAt(T);
+
+    // Remove entry + any associated scheme at same time
+    ha.splice(index, 1);
+    for (var i = index; i < ha.length; i++) {
+        if (ha[i][2] === T && tlIsScheme(ha[i])) { ha.splice(i, 1); break; }
+        if (ha[i][2] > T) break;
+    }
+
+    if (isTCI) {
+        // Wipe everything after T, continue at last TCI pump rate
+        tlWipeAfter(T);
+        var resumeRate = tlLastTCIRate(T);
+        // Insert a manual rate entry at T to continue at that rate
+        var insertAt = ha.findIndex(function(x) { return x[2] > T; });
+        var rateEntry = [0, 2, T, resumeRate];
+        if (insertAt === -1) ha.push(rateEntry);
+        else ha.splice(insertAt, 0, rateEntry);
+    } else if (wasTCIActive) {
+        // Manual bolus inside TCI run — terminate TCI, continue at last TCI rate
+        tlWipeAfter(T);
+        var resumeRate = tlLastTCIRate(T);
+        var insertAt = ha.findIndex(function(x) { return x[2] > T; });
+        var rateEntry = [0, 2, T, resumeRate];
+        if (insertAt === -1) ha.push(rateEntry);
+        else ha.splice(insertAt, 0, rateEntry);
+    }
+
+    tlBuildHistoryArray(T + 21600);
+    tlRerunFromTime(T);
+}
+
+// ── Add a new event ──────────────────────────────────────────────
+
+function tlCommitAdd(type, timeStr, valStr) {
+    var T = tlParseTime(timeStr);
+    var val = parseFloat(valStr);
+    if (isNaN(T) || T < 1) { alert('Invalid time'); return; }
+    if (isNaN(val) || val <= 0) { alert('Invalid value'); return; }
+
+    var ha = drug_sets[0].historyarrays;
+    var wasTCIActive = tlIsTCIActiveAt(T);
+
+    if (type === 'tci_cpt' || type === 'tci_cet') {
+        tlWipeAfter(T);
+        tlApplyTCITarget(type === 'tci_cpt' ? 1 : 2, T, val, T);
+        return;
+    }
+
+    // Manual bolus or rate change
+    var mode = 0;
+    var evtType = (type === 'bolus') ? 1 : 2;
+    var newEntry = [mode, evtType, T, val];
+
+    if (wasTCIActive) {
+        // Inserting manual event into TCI run — terminate TCI at T
+        tlWipeAfter(T);
+        if (type === 'bolus') {
+            // Apply bolus then continue at last TCI rate
+            var resumeRate = tlLastTCIRate(T);
+            var insertAt = ha.findIndex(function(x) { return x[2] > T; });
+            if (insertAt === -1) { ha.push(newEntry); ha.push([0, 2, T, resumeRate]); }
+            else { ha.splice(insertAt, 0, newEntry); ha.splice(insertAt+1, 0, [0, 2, T, resumeRate]); }
+        } else {
+            // Rate change - replaces TCI
+            var insertAt = ha.findIndex(function(x) { return x[2] > T; });
+            if (insertAt === -1) ha.push(newEntry);
+            else ha.splice(insertAt, 0, newEntry);
+        }
+    } else {
+        var insertAt = ha.findIndex(function(x) { return x[2] > T; });
+        if (insertAt === -1) ha.push(newEntry);
+        else ha.splice(insertAt, 0, newEntry);
+    }
+
+    tlBuildHistoryArray(T + 21600);
+    tlRerunFromTime(T);
+}
+
+// ── Check if TCI is active at time T ────────────────────────────
+
+function tlIsTCIActiveAt(T) {
+    var ha = drug_sets[0].historyarrays;
+    var lastMode = 'manual';
+    for (var i = 0; i < ha.length; i++) {
+        if (ha[i][2] > T) break;
+        if (tlIsTarget(ha[i])) lastMode = 'tci';
+        else if (ha[i][0] === 0 && (ha[i][1] === 1 || ha[i][1] === 2)) lastMode = 'manual';
+    }
+    return lastMode === 'tci';
+}
+
+// ── Wipe all events from time T onwards ─────────────────────────
+
+function tlWipeAfter(T) {
+    var ha = drug_sets[0].historyarrays;
+    for (var i = ha.length - 1; i >= 0; i--) {
+        if (ha[i][2] !== undefined && ha[i][2] >= T) ha.splice(i, 1);
+    }
+}
+
+// ── Apply TCI target (deferred — requires full deliver_cpt/cet) ─
+
+function tlApplyTCITarget(mode, T, target, rerunT) {
+    // We can't call deliver_cpt/cet directly with arbitrary time —
+    // instead suspend sim, jump to T, set target via existing UI machinery
+    // then rerun from rerunT.
+    // Wrap the existing timeFxResume + deliver flow:
+    var jumpDelta = T - Math.floor(time_in_s);
+
+    // Store pending TCI apply for after jump completes
+    tlPendingTCI = { mode: mode, target: target, rerunT: rerunT };
+
+    // Set time selectors for jump
+    var h = Math.floor(T / 3600);
+    var m = Math.floor((T % 3600) / 60);
+    var s = T % 60;
+    document.getElementById('timeFxTimeMode').value = '2';
+    document.getElementById('hh2').value = h;
+    document.getElementById('mm2').value = m;
+    document.getElementById('ss2').value = s;
+    timeFxSubmitJump();
+
+    // After jump, deliver_cpt/cet, then rerun
+    setTimeout(function() {
+        if (tlPendingTCI) {
+            var pending = tlPendingTCI;
+            tlPendingTCI = null;
+            drug_sets[0].desired = pending.target;
+            if (pending.mode === 1) {
+                deliver_cpt(pending.target, 0, 0, 0);
+            } else {
+                deliver_cet(pending.target, 0);
+            }
+            tlRerunFromTime(pending.rerunT);
+        }
+    }, 800);
+}
+var tlPendingTCI = null;
+
+// ── Render the timeline panel ────────────────────────────────────
+
+function tlRender() {
+    var el = document.getElementById('timelinelist');
+    if (!el) return;
+    if (!drug_sets || !drug_sets[0] || !drug_sets[0].historyarrays) {
+        el.innerHTML = '<div style="padding:16px;opacity:0.5;font-size:0.85rem">Start a simulation to see the timeline.</div>';
+        return;
+    }
+
+    var ha = drug_sets[0].historyarrays;
+    var now = Math.floor(time_in_s);
+    var html = '';
+
+    for (var i = 0; i < ha.length; i++) {
+        var e = ha[i];
+        if (e[1] === undefined) continue;
+
+        var isPast = (e[2] <= now);
+        var isScheme = tlIsScheme(e);
+        var isEditable = tlIsEditable(e);
+        var isTCITarget = tlIsTarget(e);
+
+        var rowClass = 'tl-row' + (isPast ? ' tl-past' : ' tl-future') +
+                       (isScheme ? ' tl-scheme' : '') +
+                       (isTCITarget ? ' tl-tci' : '');
+
+        var timeStr = tlConvertTime(e[2]);
+        var label = tlEventLabel(e);
+
+        html += '<div class="' + rowClass + '" data-idx="' + i + '">';
+        html += '<div class="tl-time">' + timeStr + '</div>';
+        html += '<div class="tl-label">' + label + '</div>';
+
+        if (isEditable) {
+            html += '<div class="tl-actions">';
+            html += '<a class="tl-btn" onclick="tlOpenEdit(' + i + ')"><i class="fas fa-pencil-alt"></i></a>';
+            html += '<a class="tl-btn tl-del" onclick="tlConfirmDelete(' + i + ')"><i class="fas fa-times"></i></a>';
+            html += '</div>';
+        }
+        html += '</div>';
+
+        // Edit form (hidden by default, shown when editing)
+        if (isEditable) {
+            var valLabel = (e[1] === 1) ? (isTCITarget ? 'Target' : 'Dose (' + drug_sets[0].infused_units + ')') :
+                           (e[0] === 0 && e[1] === 2) ? 'Rate (ml/h)' :
+                           isTCITarget ? 'Target (' + drug_sets[0].conc_units + '/ml)' : 'Value';
+            var curVal = (isTCITarget && e[0] === 1 && drug_sets[0].fentanyl_weightadjusted_flag === 1) ?
+                         e[3] : e[3];
+
+            html += '<div class="tl-editform" id="tl-editform-' + i + '" style="display:none">';
+            html += '<div class="tl-editrow">';
+            html += '<label class="tl-editlabel">Time (MM:SS)</label>';
+            html += '<input class="tl-editinput" id="tl-etime-' + i + '" value="' + timeStr + '"/>';
+            html += '</div>';
+            html += '<div class="tl-editrow">';
+            html += '<label class="tl-editlabel">' + valLabel + '</label>';
+            html += '<input class="tl-editinput" id="tl-eval-' + i + '" value="' + curVal + '" type="number" min="0" step="any"/>';
+            html += '</div>';
+            html += '<div class="tl-editrow" style="gap:8px">';
+            html += '<a class="button invert" style="font-size:0.8rem;padding:4px 10px" onclick="tlSaveEdit(' + i + ')">Save</a>';
+            html += '<a class="button muted" style="font-size:0.8rem;padding:4px 10px" onclick="tlCloseEdit(' + i + ')">Cancel</a>';
+            html += '</div>';
+            html += '</div>';
+        }
+    }
+
+    // NOW marker
+    html += '<div class="tl-now"><span>▶ NOW ' + tlConvertTime(now) + '</span></div>';
+
+    // Add event forms
+    html += '<div id="tl-addform" style="display:none" class="tl-editform">';
+    html += '<div id="tl-addform-inner"></div>';
+    html += '</div>';
+
+    el.innerHTML = html;
+}
+
+// ── Edit form open/close/save ────────────────────────────────────
+
+function tlOpenEdit(i) {
+    // Close any open forms first
+    document.querySelectorAll('.tl-editform').forEach(function(f) { f.style.display = 'none'; });
+    var form = document.getElementById('tl-editform-' + i);
+    if (form) form.style.display = 'block';
+}
+
+function tlCloseEdit(i) {
+    var form = document.getElementById('tl-editform-' + i);
+    if (form) form.style.display = 'none';
+}
+
+function tlSaveEdit(origIndex) {
+    var timeVal = document.getElementById('tl-etime-' + origIndex).value;
+    var valVal = document.getElementById('tl-eval-' + origIndex).value;
+    tlCommitEdit(origIndex, timeVal, valVal);
+}
+
+function tlConfirmDelete(i) {
+    var ha = drug_sets[0].historyarrays;
+    var e = ha[i];
+    var label = tlEventLabel(e) + ' at ' + tlConvertTime(e[2]);
+    var warn = tlIsTarget(e) ?
+        'Delete TCI target at ' + tlConvertTime(e[2]) + '?\n\nAll events after this time will be removed and the model will rerun.' :
+        'Delete ' + label + '?';
+    if (confirm(warn)) tlDeleteEvent(i);
+}
+
+// ── Add event forms ──────────────────────────────────────────────
+
+var tlAddType = null;
+
+function tlAddEvent(type) {
+    tlAddType = type;
+    document.querySelectorAll('.tl-editform').forEach(function(f) { f.style.display = 'none'; });
+    var inner = document.getElementById('tl-addform-inner');
+    var now = Math.floor(time_in_s);
+    var timeStr = tlConvertTime(now);
+
+    var valLabel, placeholder, defaultVal;
+    if (type === 'bolus') {
+        valLabel = 'Dose (' + drug_sets[0].infused_units + ')';
+        placeholder = '50'; defaultVal = '';
+    } else if (type === 'rate') {
+        valLabel = 'Rate (ml/h)';
+        placeholder = '10'; defaultVal = '';
+    } else {
+        // tci
+        var isCET = drug_sets[0].cet_active > 0;
+        tlAddType = isCET ? 'tci_cet' : 'tci_cpt';
+        valLabel = isCET ? 'Ce target (' + drug_sets[0].conc_units + '/ml)' :
+                           'Cp target (' + drug_sets[0].conc_units + '/ml)';
+        placeholder = '3'; defaultVal = '';
+    }
+
+    inner.innerHTML =
+        '<div style="font-weight:bold;font-size:0.82rem;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #ddd">' +
+        (type === 'bolus' ? 'Add Bolus' : type === 'rate' ? 'Add Rate Change' : 'Add TCI Target') + '</div>' +
+        '<div class="tl-editrow"><label class="tl-editlabel">Time (MM:SS)</label>' +
+        '<input class="tl-editinput" id="tl-add-time" value="' + timeStr + '"/></div>' +
+        '<div class="tl-editrow"><label class="tl-editlabel">' + valLabel + '</label>' +
+        '<input class="tl-editinput" id="tl-add-val" type="number" min="0" step="any" placeholder="' + placeholder + '" value="' + defaultVal + '"/></div>' +
+        '<div class="tl-editrow" style="gap:8px">' +
+        '<a class="button invert" style="font-size:0.8rem;padding:4px 10px" onclick="tlSaveAdd()">Add</a>' +
+        '<a class="button muted" style="font-size:0.8rem;padding:4px 10px" onclick="document.getElementById(\'tl-addform\').style.display=\'none\'">Cancel</a>' +
+        '</div>';
+
+    document.getElementById('tl-addform').style.display = 'block';
+    setTimeout(function() { var el = document.getElementById('tl-add-val'); if(el) el.focus(); }, 50);
+}
+
+function tlSaveAdd() {
+    var timeStr = document.getElementById('tl-add-time').value;
+    var valStr = document.getElementById('tl-add-val').value;
+    document.getElementById('tl-addform').style.display = 'none';
+    tlCommitAdd(tlAddType, timeStr, valStr);
+}
+
+// ── Auto-refresh timeline when on that tab ───────────────────────
+
+var tlRefreshInterval = null;
+function tlStartRefresh() {
+    if (tlRefreshInterval) return;
+    tlRefreshInterval = setInterval(function() {
+        var tab = document.getElementById('btn_displaytimeline');
+        if (tab && tab.classList.contains('active')) tlRender();
+    }, 2000);
+}
+// Start refresh loop once page loads
+if (document.readyState === 'complete') { tlStartRefresh(); }
+else { window.addEventListener('load', tlStartRefresh); }
+

@@ -412,3 +412,114 @@ body.dark #ptolcard_switch {
     right: calc((100% - 968px)/2 + 2px);
   }
 }
+
+/* ── Timeline Editor ─────────────────────────────────────── */
+#timelinewrapper {
+    height: calc(100% - 0px);
+    overflow-y: auto;
+    background: #f7f7f7;
+    -webkit-overflow-scrolling: touch;
+}
+.tl-row {
+    display: flex;
+    align-items: center;
+    padding: 7px 8px;
+    border-bottom: 1px solid #e8e8e8;
+    background: #fff;
+    gap: 6px;
+    font-size: 0.85rem;
+}
+.tl-row.tl-past { opacity: 1; }
+.tl-row.tl-future { background: #f0f7ff; }
+.tl-row.tl-scheme {
+    padding: 3px 8px 3px 20px;
+    font-size: 0.75rem;
+    color: #888;
+    background: #fafafa;
+    border-bottom: 1px solid #f0f0f0;
+}
+.tl-row.tl-tci {
+    border-left: 3px solid #2196f3;
+}
+.tl-time {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.78rem;
+    color: #888;
+    min-width: 52px;
+    flex-shrink: 0;
+}
+.tl-label {
+    flex: 1;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tl-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.tl-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    background: #f0f0f0;
+    color: #555;
+    cursor: pointer;
+    font-size: 0.8rem;
+    border: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.tl-btn:active { background: #ddd; }
+.tl-btn.tl-del { color: #c0392b; background: #fdf0f0; }
+.tl-btn.tl-del:active { background: #f5c6c6; }
+.tl-editform {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 4px 6px;
+}
+.tl-editrow {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 8px;
+}
+.tl-editlabel {
+    font-size: 0.78rem;
+    color: #666;
+    min-width: 100px;
+    flex-shrink: 0;
+}
+.tl-editinput {
+    flex: 1;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 5px 8px;
+    font-size: 0.88rem;
+    -webkit-appearance: none;
+}
+.tl-editinput:focus {
+    outline: none;
+    border-color: #2196f3;
+}
+.tl-now {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: #e74c3c;
+    background: #fff8f8;
+    border-top: 2px solid #e74c3c;
+    border-bottom: 1px solid #fdd;
+}
+#timelineaddbtn {
+    padding: 12px 8px;
+    background: #f7f7f7;
+}

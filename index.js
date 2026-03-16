@@ -56,16 +56,30 @@ function ringbell2timeoutcallback() {
 function show_graph() {
 	document.getElementById("chartwrapper").classList.remove("hide");
 	document.getElementById("historywrapper2").classList.remove("open");
+	document.getElementById("timelinewrapper").style.display = "none";
 	document.getElementById("outputcontainer").classList.remove("showscheme");
 	document.getElementById("btn_displayhistory").classList.remove("active");
+	document.getElementById("btn_displaytimeline").classList.remove("active");
 	document.getElementById("btn_displaychart").classList.add("active");
 }
 function show_history() {
 	document.getElementById("chartwrapper").classList.add("hide");
 	document.getElementById("historywrapper2").classList.add("open");
+	document.getElementById("timelinewrapper").style.display = "none";
 	document.getElementById("outputcontainer").classList.add("showscheme");
 	document.getElementById("btn_displayhistory").classList.add("active");
 	document.getElementById("btn_displaychart").classList.remove("active");
+	document.getElementById("btn_displaytimeline").classList.remove("active");
+}
+function show_timeline() {
+	document.getElementById("chartwrapper").classList.add("hide");
+	document.getElementById("historywrapper2").classList.remove("open");
+	document.getElementById("timelinewrapper").style.display = "block";
+	document.getElementById("outputcontainer").classList.add("showscheme");
+	document.getElementById("btn_displaytimeline").classList.add("active");
+	document.getElementById("btn_displaychart").classList.remove("active");
+	document.getElementById("btn_displayhistory").classList.remove("active");
+	if (typeof tlRender === "function") tlRender();
 }
 function show_isobologram() {
 	document.getElementById("chart2wrapper").classList.remove("hide");
@@ -702,6 +716,7 @@ const xInputCardsHTML = `
 			<div id="outputselector">
 				<a class="outputtab active" id="btn_displaychart" onclick="show_graph();">Graph</a>
 				<a class="outputtab" id="btn_displayhistory" onclick="show_history();">History</a>
+				<a class="outputtab" id="btn_displaytimeline" onclick="show_timeline();">Timeline</a>
 			</div>
 			<div id="chartwrapper">
 				<div id="chartoverlay">
@@ -780,6 +795,14 @@ const xInputCardsHTML = `
 			</div>
 			<div id="historywrapper2">
 				<div id="historywrapper">
+				</div>
+			</div>
+			<div id="timelinewrapper" style="display:none; overflow-y:auto; padding:8px 4px 80px 4px">
+				<div id="timelinelist"></div>
+				<div id="timelineaddbtn" style="padding:10px 4px 4px 4px; display:flex; gap:8px; flex-wrap:wrap">
+					<a class="button invert" onclick="tlAddEvent('bolus')"><i class="fas fa-syringe"></i> Add Bolus</a>
+					<a class="button invert" onclick="tlAddEvent('rate')"><i class="fas fa-tint"></i> Add Rate</a>
+					<a class="button invert" onclick="tlAddEvent('tci')"><i class="fas fa-crosshairs"></i> Add TCI Target</a>
 				</div>
 			</div>
 				<div id="pastscheme">

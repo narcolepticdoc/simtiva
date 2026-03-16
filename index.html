@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<script>const APP_VERSION = "ND 0.0.1.1";</script>
+	<script>const APP_VERSION = "ND 0.0.1.2";</script>
 	<link rel="stylesheet" href="styles.css">
 	<link rel="preload" href="styles-extra.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
 	<link rel="preload" href="css/fontawesome.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'"> 
@@ -80,7 +80,7 @@
 		</div>
 		<div id="modalInitial" class="modal">
 			<div class="modal-content" id="modalInitialcontent">
-				<div class="modal-header">Enter patient data<span id="app-version-display" style="position:absolute;left:50%;transform:translateX(-50%);font-size:0.62rem;font-weight:normal;opacity:0.45;letter-spacing:0.02em;pointer-events:none"></span><!--<span class="close notcondensed" onClick="hideallmodal()">&times;</span>--><img onclick="displayAbout();" src="apple-touch-icon-180x180.png" style="position:absolute;right:6px;width:44px;cursor:pointer"></div>
+				<div class="modal-header">Enter patient data<span style="position:absolute;left:50%;transform:translateX(-50%);font-size:0.62rem;font-weight:normal;letter-spacing:0.02em;display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><span id="app-version-display" style="opacity:0.45;pointer-events:none"></span><span id="app-update-notice" style="display:none;background:#e6a817;color:#fff;border-radius:4px;padding:1px 6px;font-size:0.6rem;font-weight:bold;cursor:pointer;letter-spacing:0.03em" onclick="window.location.reload()">UPDATE ↻</span></span><!--<span class="close notcondensed" onClick="hideallmodal()">&times;</span>--><img onclick="displayAbout();" src="apple-touch-icon-180x180.png" style="position:absolute;right:6px;width:44px;cursor:pointer"></div>
 				<div class="modal-body">
 					<div class="paedimode_selector">
 						<a class="button_paedimode active" id="paedimode0" onclick="switchpaedimode(0);">Adult</a><!--
