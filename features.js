@@ -5133,6 +5133,8 @@ function confirmNumpad(parameter) {
 	
 	generateBoxes();
 	hideNumpad();
+	// Keep timeline in sync after legacy TCI target entry
+	if (typeof tlRender === 'function') setTimeout(tlRender, 100);
 }
 
 function cancelNumpad() {

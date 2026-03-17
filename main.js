@@ -5673,7 +5673,7 @@ function tlLastTCIRate(T) {
 
 function tlRerunFromTime(T) {
     if (!drug_sets[0] || !drug_sets[0].cpt_cp || drug_sets[0].cpt_cp.length === 0) return;
-    T = Math.max(1, Math.floor(T));
+    T = Math.max(0, Math.floor(T));
 
     // 1. Stop loops
     clearInterval(loop1); clearInterval(loop2);
@@ -5757,7 +5757,7 @@ function tlCommitEdit(origIndex, newTimeStr, newValStr) {
 
     var newTime = tlParseTime(newTimeStr);
     var newVal = parseFloat(newValStr);
-    if (isNaN(newTime) || newTime < 1) { alert('Invalid time'); return; }
+    if (isNaN(newTime) || newTime < 0) { alert('Invalid time'); return; }
     if (isNaN(newVal) || newVal < 0) { alert('Invalid value'); return; }
 
     var oldTime = e[2];
@@ -5838,7 +5838,7 @@ function tlDeleteEvent(index) {
 function tlCommitAdd(type, timeStr, valStr) {
     var T = tlParseTime(timeStr);
     var val = parseFloat(valStr);
-    if (isNaN(T) || T < 1) { alert('Invalid time'); return; }
+    if (isNaN(T) || T < 0) { alert('Invalid time'); return; }
     if (isNaN(val) || val <= 0) { alert('Invalid value'); return; }
 
     var ha = drug_sets[0].historyarrays;
@@ -6066,6 +6066,8 @@ function tlCloseEdit(i) {
 function tlSaveEdit(origIndex) {
     var timeVal = document.getElementById('tl-etime-' + origIndex).value;
     var valVal = document.getElementById('tl-eval-' + origIndex).value;
+    // Close form first so tlRender guard doesn't block the refresh
+    tlCloseEdit(origIndex);
     tlCommitEdit(origIndex, timeVal, valVal);
 }
 
@@ -6125,19 +6127,34 @@ function tlAddEvent(type) {
 function tlSaveAdd() {
     var timeStr = document.getElementById('tl-add-time').value;
     var valStr = document.getElementById('tl-add-val').value;
+    // Read values and close form before committing so render guard doesn't block
+    var type = tlAddType;
     document.getElementById('tl-addform').style.display = 'none';
-    tlCommitAdd(tlAddType, timeStr, valStr);
+    tlAddType = null;
+    tlCommitAdd(type, timeStr, valStr);
 }
 
 // ── Auto-refresh timeline when on that tab ───────────────────────
 
 var tlRefreshInterval = null;
+var tlLastHALength = 0; // track historyarrays length to detect external changes
+
 function tlStartRefresh() {
     if (tlRefreshInterval) return;
     tlRefreshInterval = setInterval(function() {
         var tab = document.getElementById('btn_displaytimeline');
-        if (tab && tab.classList.contains('active')) tlRender();
-    }, 2000);
+        if (!tab || !tab.classList.contains('active')) return;
+        // Re-render if historyarrays has changed (legacy UI added events)
+        // or unconditionally every 2s for the NOW marker
+        var currentLen = (drug_sets && drug_sets[0] && drug_sets[0].historyarrays)
+            ? drug_sets[0].historyarrays.length : 0;
+        var forceRefresh = (currentLen !== tlLastHALength);
+        tlLastHALength = currentLen;
+        // Only re-render if no edit form is open, or if forced by external change
+        if (forceRefresh || !document.querySelector('.tl-editform[style*="block"]')) {
+            tlRender();
+        }
+    }, 500);
 }
 // Start refresh loop once page loads
 if (document.readyState === 'complete') { tlStartRefresh(); }
