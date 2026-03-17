@@ -5577,14 +5577,28 @@ function tlIsTarget(entry) {
 }
 
 function tlEventLabel(e) {
+    if (e[0] === undefined || e[1] === undefined) return null; // sentinel
     if (e[0] === 0 && e[1] === 1) return 'Bolus ' + e[3] + drug_sets[0].infused_units;
     if (e[0] === 0 && e[1] === 2) return 'Rate ' + Math.round(e[3]*100)/100 + ' ml/h';
     if (e[0] === 1 && e[1] === 0) return 'TCI Cp ' + e[3] + ' ' + drug_sets[0].conc_units + '/ml';
     if (e[0] === 1 && e[1] === 1) return 'TCI Bolus ' + e[3] + drug_sets[0].infused_units;
-    if (e[0] === 1 && e[1] === 2) return '↳ TCI scheme';
+    if (e[0] === 1 && e[1] === 2) {
+        // Show last rate step from scheme if available
+        if (e[3] && e[3].length) {
+            var lastRate = e[3][e[3].length-1][1];
+            return '↳ scheme, last rate ' + Math.round(lastRate*3600/drug_sets[0].infusate_concentration*10)/10 + ' ml/h';
+        }
+        return '↳ TCI scheme';
+    }
     if (e[0] === 2 && e[1] === 0) return 'TCI Ce ' + e[3] + ' ' + drug_sets[0].conc_units + '/ml';
-    if (e[0] === 2 && e[1] === 2) return '↳ TCI scheme';
-    return 'Event';
+    if (e[0] === 2 && e[1] === 2) {
+        if (e[3] && e[3].length) {
+            var lastRate = e[3][e[3].length-1][1];
+            return '↳ scheme, last rate ' + Math.round(lastRate*3600/drug_sets[0].infusate_concentration*10)/10 + ' ml/h';
+        }
+        return '↳ TCI scheme';
+    }
+    return null; // skip unknown entries
 }
 
 function tlIsEditable(e) {
@@ -5597,42 +5611,43 @@ function tlIsEditable(e) {
 function tlBuildHistoryArray(upToTime) {
     var ha = drug_sets[0].historyarrays;
     drug_sets[0].historyarray = [];
-    var lastScheme = null;
-    var lastManualRate = null; // ml/h
+
+    // Walk entries in time order, tracking the most recent rate schedule
+    var lastScheme = null;     // full [time, rate_amount/sec][] from TCI
+    var lastManualRate = null; // ml/h from manual rate change
 
     for (var i = 0; i < ha.length; i++) {
         var e = ha[i];
-        if (e[2] !== undefined && e[2] >= upToTime) break;
+        if (e[2] === undefined) continue;
+        if (e[2] >= upToTime) break;
 
-        if (tlIsScheme(e)) {
-            // TCI scheme - store the whole scheme array, find last rate before upToTime
-            lastScheme = e[3]; // array of [time, rate_amount/sec]
+        if (tlIsScheme(e) && e[3] && e[3].length) {
+            // CPT or CET scheme array
+            lastScheme = e[3];
             lastManualRate = null;
         } else if (e[0] === 0 && e[1] === 2) {
-            // manual rate change - ml/h stored in [3]
+            // Manual rate change (ml/h)
             lastManualRate = e[3];
             lastScheme = null;
         }
     }
 
     if (lastScheme) {
-        // Restore TCI scheme, truncated to upToTime
+        // Restore TCI scheme entries up to upToTime
         for (var j = 0; j < lastScheme.length; j++) {
-            if (lastScheme[j][0] < upToTime) {
-                drug_sets[0].historyarray.push([lastScheme[j][0], lastScheme[j][1]]);
-            }
+            drug_sets[0].historyarray.push([lastScheme[j][0], lastScheme[j][1]]);
         }
     } else if (lastManualRate !== null) {
-        // Find the time of the last rate change
-        for (var i = ha.length - 1; i >= 0; i--) {
-            if (ha[i][0] === 0 && ha[i][1] === 2 && ha[i][2] < upToTime) {
-                var rateAmt = ha[i][3] * drug_sets[0].infusate_concentration / 3600;
-                drug_sets[0].historyarray.push([ha[i][2], rateAmt]);
+        // Find time of last manual rate entry and push as flat rate step
+        for (var k = ha.length - 1; k >= 0; k--) {
+            if (ha[k][0] === 0 && ha[k][1] === 2 && ha[k][2] < upToTime) {
+                var rateAmt = ha[k][3] * drug_sets[0].infusate_concentration / 3600;
+                drug_sets[0].historyarray.push([ha[k][2], rateAmt]);
                 break;
             }
         }
     }
-    // If nothing found historyarray stays empty (sim at zero rate)
+    // If nothing found, historyarray stays empty (zero rate — infusion off)
 }
 
 // ── Find last TCI pump rate (ml/h) at or before time T ──────────
@@ -5684,8 +5699,11 @@ function tlRerunFromTime(T) {
     tlBuildHistoryArray(T + 21600); // include full future schedule
 
     // 5. Rerun lookaheadfill from T
-    if (T <= drug_sets[0].cpt_cp.length) {
-        lookaheadfill(0, T, T + 21600);
+    // lookaheadfill requires cpt_cp[T-1] to exist — if array was truncated
+    // below T (e.g. all events deleted), use the actual current array length
+    var rerunFrom = Math.min(T, drug_sets[0].cpt_cp.length);
+    if (rerunFrom >= 1 && drug_sets[0].cpt_cp.length >= rerunFrom) {
+        lookaheadfill(0, rerunFrom, rerunFrom + 21600);
     }
 
     // 6. Update historytext display from historyarrays
@@ -5929,24 +5947,9 @@ function tlRender() {
     var el = document.getElementById('timelinelist');
     if (!el) return;
 
-    // --- DIAGNOSTIC ---
-    var diag = '';
-    diag += 'drug_sets exists: ' + (typeof drug_sets !== "undefined") + '<br>';
-    diag += 'drug_sets[0] exists: ' + (drug_sets && drug_sets[0] ? 'yes' : 'no') + '<br>';
-    if (drug_sets && drug_sets[0]) {
-        diag += 'historyarrays: ' + (drug_sets[0].historyarrays ? 'yes len=' + drug_sets[0].historyarrays.length : 'MISSING') + '<br>';
-        diag += 'drug_name: ' + (drug_sets[0].drug_name || 'none') + '<br>';
-        diag += 'time_in_s: ' + (typeof time_in_s !== "undefined" ? time_in_s : 'undef') + '<br>';
-        if (drug_sets[0].historyarrays && drug_sets[0].historyarrays.length > 0) {
-            diag += 'ha[0]: ' + JSON.stringify(drug_sets[0].historyarrays[0]).substring(0,80) + '<br>';
-        }
-    }
-    el.innerHTML = '<div style="padding:12px;font-size:0.75rem;font-family:monospace;background:#fff3cd;border-radius:6px;margin:8px">' + diag + '</div>';
-    // --- END DIAGNOSTIC --- (remove before release)
-
     // Not yet started
     if (!drug_sets || !drug_sets[0] || !drug_sets[0].historyarrays) {
-        el.innerHTML += '<div style="padding:16px;opacity:0.5;font-size:0.85rem">Start a simulation to see the timeline.</div>';
+        el.innerHTML = '<div style="padding:16px;opacity:0.5;font-size:0.85rem">Start a simulation to see the timeline.</div>';
         return;
     }
 
@@ -5967,10 +5970,16 @@ function tlRender() {
 
     var html = '';
 
+    // Don't re-render while an edit form is open
+    if (document.querySelector('.tl-editform[style*="block"]')) return;
+
     for (var i = 0; i < ha.length; i++) {
         var e = ha[i];
         // Skip sentinel entries (first entry has undefined e[0])
         if (e[0] === undefined || e[1] === undefined) continue;
+        // Skip entries with null labels (unknown types)
+        var label = tlEventLabel(e);
+        if (label === null) continue;
 
         var isPast = (e[2] !== undefined && e[2] <= now);
         var isScheme = tlIsScheme(e);
@@ -5983,7 +5992,6 @@ function tlRender() {
             (isTCITarget ? ' tl-tci' : '');
 
         var timeStr = e[2] !== undefined ? tlConvertTime(e[2]) : '?';
-        var label = tlEventLabel(e);
 
         html += '<div class="' + rowClass + '" data-idx="' + i + '">';
         html += '<div class="tl-time">' + timeStr + '</div>';
