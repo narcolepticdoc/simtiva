@@ -5717,7 +5717,7 @@ function tlRebuildHistoryText() {
     var txt = '';
     for (var i = 0; i < ha.length; i++) {
         var e = ha[i];
-        if (e[1] === undefined) continue;
+        if (e[0] === undefined || e[1] === undefined) continue;
         if (e[0] === 0 && e[1] === 1)
             txt += "<div><div class='timespan'>" + tlConvertTime(e[2]) + "</div>Bolus: " + e[3] + drug_sets[0].infused_units + "</div>";
         else if (e[0] === 0 && e[1] === 2)
@@ -5928,29 +5928,61 @@ var tlPendingTCI = null;
 function tlRender() {
     var el = document.getElementById('timelinelist');
     if (!el) return;
+
+    // --- DIAGNOSTIC ---
+    var diag = '';
+    diag += 'drug_sets exists: ' + (typeof drug_sets !== "undefined") + '<br>';
+    diag += 'drug_sets[0] exists: ' + (drug_sets && drug_sets[0] ? 'yes' : 'no') + '<br>';
+    if (drug_sets && drug_sets[0]) {
+        diag += 'historyarrays: ' + (drug_sets[0].historyarrays ? 'yes len=' + drug_sets[0].historyarrays.length : 'MISSING') + '<br>';
+        diag += 'drug_name: ' + (drug_sets[0].drug_name || 'none') + '<br>';
+        diag += 'time_in_s: ' + (typeof time_in_s !== "undefined" ? time_in_s : 'undef') + '<br>';
+        if (drug_sets[0].historyarrays && drug_sets[0].historyarrays.length > 0) {
+            diag += 'ha[0]: ' + JSON.stringify(drug_sets[0].historyarrays[0]).substring(0,80) + '<br>';
+        }
+    }
+    el.innerHTML = '<div style="padding:12px;font-size:0.75rem;font-family:monospace;background:#fff3cd;border-radius:6px;margin:8px">' + diag + '</div>';
+    // --- END DIAGNOSTIC --- (remove before release)
+
+    // Not yet started
     if (!drug_sets || !drug_sets[0] || !drug_sets[0].historyarrays) {
-        el.innerHTML = '<div style="padding:16px;opacity:0.5;font-size:0.85rem">Start a simulation to see the timeline.</div>';
+        el.innerHTML += '<div style="padding:16px;opacity:0.5;font-size:0.85rem">Start a simulation to see the timeline.</div>';
         return;
     }
 
     var ha = drug_sets[0].historyarrays;
     var now = Math.floor(time_in_s);
+
+    // Count real (non-sentinel) events
+    var realEvents = ha.filter(function(e) {
+        return e[0] !== undefined && e[1] !== undefined;
+    });
+
+    if (realEvents.length === 0) {
+        el.innerHTML += '<div style="padding:16px;opacity:0.5;font-size:0.85rem">No events recorded yet.</div>';
+        var addEl = document.getElementById('timelineaddbtn');
+        if (addEl) addEl.style.display = 'flex';
+        return;
+    }
+
     var html = '';
 
     for (var i = 0; i < ha.length; i++) {
         var e = ha[i];
-        if (e[1] === undefined) continue;
+        // Skip sentinel entries (first entry has undefined e[0])
+        if (e[0] === undefined || e[1] === undefined) continue;
 
-        var isPast = (e[2] <= now);
+        var isPast = (e[2] !== undefined && e[2] <= now);
         var isScheme = tlIsScheme(e);
         var isEditable = tlIsEditable(e);
         var isTCITarget = tlIsTarget(e);
 
-        var rowClass = 'tl-row' + (isPast ? ' tl-past' : ' tl-future') +
-                       (isScheme ? ' tl-scheme' : '') +
-                       (isTCITarget ? ' tl-tci' : '');
+        var rowClass = 'tl-row' +
+            (isPast ? ' tl-past' : ' tl-future') +
+            (isScheme ? ' tl-scheme' : '') +
+            (isTCITarget ? ' tl-tci' : '');
 
-        var timeStr = tlConvertTime(e[2]);
+        var timeStr = e[2] !== undefined ? tlConvertTime(e[2]) : '?';
         var label = tlEventLabel(e);
 
         html += '<div class="' + rowClass + '" data-idx="' + i + '">';
@@ -5965,13 +5997,21 @@ function tlRender() {
         }
         html += '</div>';
 
-        // Edit form (hidden by default, shown when editing)
+        // Inline edit form
         if (isEditable) {
-            var valLabel = (e[1] === 1) ? (isTCITarget ? 'Target' : 'Dose (' + drug_sets[0].infused_units + ')') :
-                           (e[0] === 0 && e[1] === 2) ? 'Rate (ml/h)' :
-                           isTCITarget ? 'Target (' + drug_sets[0].conc_units + '/ml)' : 'Value';
-            var curVal = (isTCITarget && e[0] === 1 && drug_sets[0].fentanyl_weightadjusted_flag === 1) ?
-                         e[3] : e[3];
+            var valLabel, curVal;
+            if (e[0] === 0 && e[1] === 1) {
+                valLabel = 'Dose (' + drug_sets[0].infused_units + ')';
+                curVal = e[3];
+            } else if (e[0] === 0 && e[1] === 2) {
+                valLabel = 'Rate (ml/h)';
+                curVal = Math.round(e[3] * 100) / 100;
+            } else if (isTCITarget) {
+                valLabel = (e[0] === 1 ? 'Cp' : 'Ce') + ' target (' + drug_sets[0].conc_units + '/ml)';
+                curVal = e[3];
+            } else {
+                valLabel = 'Value'; curVal = e[3];
+            }
 
             html += '<div class="tl-editform" id="tl-editform-' + i + '" style="display:none">';
             html += '<div class="tl-editrow">';
@@ -5991,10 +6031,10 @@ function tlRender() {
     }
 
     // NOW marker
-    html += '<div class="tl-now"><span>▶ NOW ' + tlConvertTime(now) + '</span></div>';
+    html += '<div class="tl-now"><span>&#9654; NOW &nbsp;' + tlConvertTime(now) + '</span></div>';
 
-    // Add event forms
-    html += '<div id="tl-addform" style="display:none" class="tl-editform">';
+    // Add event inline form placeholder
+    html += '<div id="tl-addform" style="display:none" class="tl-editform" style="margin:8px 6px">';
     html += '<div id="tl-addform-inner"></div>';
     html += '</div>';
 
