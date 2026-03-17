@@ -5582,28 +5582,50 @@ function tlEventLabel(e) {
     if (e[0] === 0 && e[1] === 2) return 'Rate ' + Math.round(e[3]*100)/100 + ' ml/h';
     if (e[0] === 1 && e[1] === 0) return 'TCI Cp ' + e[3] + ' ' + drug_sets[0].conc_units + '/ml';
     if (e[0] === 1 && e[1] === 1) return 'TCI Bolus ' + e[3] + drug_sets[0].infused_units;
-    if (e[0] === 1 && e[1] === 2) {
-        // Show last rate step from scheme if available
-        if (e[3] && e[3].length) {
-            var lastRate = e[3][e[3].length-1][1];
-            return '↳ scheme, last rate ' + Math.round(lastRate*3600/drug_sets[0].infusate_concentration*10)/10 + ' ml/h';
-        }
-        return '↳ TCI scheme';
-    }
+    if (e[0] === 1 && e[1] === 2) return null; // scheme — hidden, shown via historytext
     if (e[0] === 2 && e[1] === 0) return 'TCI Ce ' + e[3] + ' ' + drug_sets[0].conc_units + '/ml';
-    if (e[0] === 2 && e[1] === 2) {
-        if (e[3] && e[3].length) {
-            var lastRate = e[3][e[3].length-1][1];
-            return '↳ scheme, last rate ' + Math.round(lastRate*3600/drug_sets[0].infusate_concentration*10)/10 + ' ml/h';
-        }
-        return '↳ TCI scheme';
-    }
+    if (e[0] === 2 && e[1] === 2) return null; // scheme — hidden, shown via historytext
     return null; // skip unknown entries
 }
 
 function tlIsEditable(e) {
     // scheme arrays are internal — shown read-only, edited via their parent target
     return !(tlIsScheme(e));
+}
+
+// ── Parse historytext to get sub-events for a TCI target at time T ────────
+// Returns array of {time, text} for scheme events that belong to this target segment
+function tlGetSchemeSubEvents(targetTime) {
+    var subEvents = [];
+    var ht = drug_sets[0].historytext;
+    if (!ht) return subEvents;
+
+    // Find the next target time after T (to bound this segment)
+    var ha = drug_sets[0].historyarrays;
+    var nextTargetTime = Infinity;
+    for (var i = 0; i < ha.length; i++) {
+        if (tlIsTarget(ha[i]) && ha[i][2] > targetTime) {
+            nextTargetTime = ha[i][2];
+            break;
+        }
+    }
+
+    // Parse historytext HTML to extract data-time elements
+    var div = document.createElement('div');
+    div.innerHTML = ht;
+    var nodes = div.querySelectorAll('[data-time]');
+    for (var j = 0; j < nodes.length; j++) {
+        var t = parseInt(nodes[j].getAttribute('data-time'));
+        if (isNaN(t)) continue;
+        if (t < targetTime || t >= nextTargetTime) continue;
+        // Strip HTML tags to get text content
+        var text = nodes[j].textContent.replace(/\s+/g, ' ').trim();
+        // Skip the target line itself (schemecpt/schemecet class)
+        var cls = nodes[j].className || '';
+        if (cls.indexOf('schemecpt') >= 0 || cls.indexOf('schemecet') >= 0) continue;
+        subEvents.push({ time: t, text: text });
+    }
+    return subEvents;
 }
 
 // ── Rebuild historyarray from historyarrays up to (not including) time T ───
@@ -6035,6 +6057,18 @@ function tlRender() {
             html += '<a class="button muted" style="font-size:0.8rem;padding:4px 10px" onclick="tlCloseEdit(' + i + ')">Cancel</a>';
             html += '</div>';
             html += '</div>';
+        }
+
+        // For TCI targets: show scheme sub-events as read-only indented rows
+        if (isTCITarget) {
+            var subEvents = tlGetSchemeSubEvents(e[2]);
+            for (var s = 0; s < subEvents.length; s++) {
+                var se = subEvents[s];
+                html += '<div class="tl-row tl-subrow ' + (se.time <= now ? 'tl-past' : 'tl-future') + '">';
+                html += '<div class="tl-time tl-subtime">' + tlConvertTime(se.time) + '</div>';
+                html += '<div class="tl-label tl-sublabel">↳ ' + se.text + '</div>';
+                html += '</div>';
+            }
         }
     }
 

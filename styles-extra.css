@@ -535,3 +535,19 @@ body.dark #ptolcard_switch {
     padding: 12px 8px;
     background: #f7f7f7;
 }
+
+/* TCI scheme sub-event rows */
+.tl-subrow {
+    padding: 4px 8px 4px 16px;
+    background: #fafafa;
+    border-bottom: 1px solid #f0f0f0;
+}
+.tl-subtime {
+    font-size: 0.72rem;
+    color: #aaa;
+}
+.tl-sublabel {
+    font-size: 0.78rem;
+    color: #777;
+    font-weight: normal;
+}
