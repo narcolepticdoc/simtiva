@@ -797,7 +797,7 @@ const xInputCardsHTML = `
 				<div id="historywrapper">
 				</div>
 			</div>
-			<div id="timelinewrapper" style="display:none; overflow-y:auto; padding:8px 4px 80px 4px">
+			<div id="timelinewrapper">
 				<div id="timelinelist"></div>
 				<div id="timelineaddbtn" style="padding:10px 4px 4px 4px; display:flex; gap:8px; flex-wrap:wrap">
 					<a class="button invert" onclick="tlAddEvent('bolus')"><i class="fas fa-syringe"></i> Add Bolus</a>
