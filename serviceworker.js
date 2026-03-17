@@ -1,4 +1,4 @@
-const APP_VERSION = "ND 0.0.1.7";
+const APP_VERSION = "ND 0.0.1.8";
 const cacheName = "simtiva-" + APP_VERSION.replace(/\s+/g, '-');
 
 const assets = [
